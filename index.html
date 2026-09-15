@@ -326,6 +326,7 @@ async function loadLiveData(){
     MATCHES = live;
     populateFacets();
     updateStatLine();
+    setDefaultYear();
     setDefaultStatus();
     applyFilters();
     const now = new Date().toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
@@ -373,6 +374,14 @@ function isPlayed(m){ return m.homeScore !== null && m.homeScore !== undefined &
 // Default to Results if any games have been played yet, otherwise Fixtures (nothing to show in Results).
 function setDefaultStatus(){
   fStatus.value = MATCHES.some(isPlayed) ? 'results' : 'fixtures';
+}
+// Default to the most recent season - a full multi-year history shouldn't require scrolling
+// past everything older just to see the current one. Only called on initial/live-data load,
+// never from populateFacets' per-filter refresh, so it never clobbers a year the user picked.
+// Year is a "2026/27"-style season string here, sorted ascending, so the latest is the last one.
+function setDefaultYear(){
+  const sorted = uniqueSorted(MATCHES, m => m.year);
+  fYear.value = sorted.length ? sorted[sorted.length - 1] : '';
 }
 function resultFor(m, side){
   if(!isPlayed(m)) return null;
@@ -444,7 +453,7 @@ function populateFacets(){
   const teamList = [...new Set(teams)].sort();
   fillSelect(fTeam, teamList, 'Any team');
 
-  fillSelect(fYear, uniqueSorted(MATCHES.filter(facetPredicate('year')), m => m.year), 'Any year');
+  fillSelect(fYear, uniqueSorted(MATCHES.filter(facetPredicate('year')), m => m.year).reverse(), 'Any year');
 
   // When a team is picked, only that team's own side counts - not whatever the opponent wore that game.
   const jerseyScope = MATCHES.filter(facetPredicate('jersey'));
@@ -681,6 +690,7 @@ function renderJerseyStats(){
 // ---------- init ----------
 populateFacets();
 updateStatLine();
+setDefaultYear();
 setDefaultStatus();
 applyFilters();
 loadLiveData();
