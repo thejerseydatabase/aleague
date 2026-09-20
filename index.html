@@ -158,6 +158,7 @@
   .c-photos{display:flex;gap:3px;justify-content:center;}
   .photo-dot{width:7px;height:7px;border-radius:50%;background:var(--loss);}
   .photo-dot.filled{background:var(--win);}
+  .row-note{grid-column:1/-1;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.03em;color:var(--text-dim2);padding-top:4px;}
   .no-results{padding:32px 16px;text-align:center;color:var(--text-dim);font-size:13.5px;}
   .list-scroll{max-height:640px;overflow-y:auto;}
 
@@ -291,7 +292,9 @@ function parseCSV(text){
 }
 
 // Match_ID, Competition, Year, Date, Round, Home Team, Home Jersey, Home Jersey Image URL, Home Score,
-// Away Score, Away Team, Away Jersey, Away Jersey Image URL, Stadium Name Used, Referee, Notes
+// Away Score, Away Team, Away Jersey, Away Jersey Image URL, Stadium Name Used, Referee, Notes,
+// Home Penalties, Away Penalties (finals series only - leave blank unless the match was drawn
+// after extra time and went to a penalty shootout)
 // Dates are day-first ("16/10/2026 09:00") - JS's native Date() assumes US MM/DD/YYYY and
 // either misreads or fails on these, so day-first is parsed explicitly before falling back.
 function parseSheetDate(s){
@@ -336,7 +339,9 @@ function csvRowsToMatches(rows){
       away: r[12],
       stadium: r[13] || null,
       referee: r[14] || null,
-      notes: r[15] || null
+      notes: r[15] || null,
+      homePens: (r[16] === '' || r[16] === undefined) ? null : parseFloat(r[16]),
+      awayPens: (r[17] === '' || r[17] === undefined) ? null : parseFloat(r[17])
     }))
     // A row only counts as a properly entered fixture once it has both teams and a real
     // date - a bare draw placeholder (e.g. a team name with no date yet) shouldn't show up.
@@ -422,9 +427,22 @@ function setDefaultYear(){
   const sorted = uniqueSorted(MATCHES, m => m.year);
   fYear.value = sorted.length ? sorted[sorted.length - 1] : '';
 }
+// A-League finals only - a drawn scoreline after extra time is broken by a penalty shootout,
+// recorded in the Home/Away Penalties columns.
+function wentToPens(m){
+  return isPlayed(m) && m.homeScore === m.awayScore &&
+    m.homePens !== null && m.homePens !== undefined &&
+    m.awayPens !== null && m.awayPens !== undefined;
+}
 function resultFor(m, side){
   if(!isPlayed(m)) return null;
-  if(m.homeScore === m.awayScore) return 'draw';
+  if(m.homeScore === m.awayScore){
+    if(wentToPens(m)){
+      const homeWonPens = m.homePens > m.awayPens;
+      return side === 'home' ? (homeWonPens ? 'win' : 'loss') : (homeWonPens ? 'loss' : 'win');
+    }
+    return 'draw';
+  }
   const homeWon = m.homeScore > m.awayScore;
   if(side === 'home') return homeWon ? 'win' : 'loss';
   return homeWon ? 'loss' : 'win';
@@ -674,7 +692,8 @@ function renderMatchup(m){
   let scoreHtml;
   if(played){
     const hr = resultFor(m,'home'), ar = resultFor(m,'away');
-    scoreHtml = `<div class="score-tiles"><div class="tile ${hr}">${m.homeScore}</div><span class="tile-sep">&ndash;</span><div class="tile ${ar}">${m.awayScore}</div></div><p class="ft-label">Full time</p>`;
+    const pensNote = wentToPens(m) ? `<p class="ft-label" style="margin-top:2px;">${m.homePens}&ndash;${m.awayPens} on penalties</p>` : '';
+    scoreHtml = `<div class="score-tiles"><div class="tile ${hr}">${m.homeScore}</div><span class="tile-sep">&ndash;</span><div class="tile ${ar}">${m.awayScore}</div></div><p class="ft-label">Full time</p>${pensNote}`;
   } else {
     scoreHtml = `<div class="vs-label">VS</div><p class="ft-label">Not yet played</p>`;
   }
@@ -715,6 +734,7 @@ function renderList(){
         <span class="jcode c-ajersey" title="${m.awayJersey || 'Unknown'} jersey"><span class="jname-full">${jerseyCode(m.awayJersey)}</span><span class="jname-short">${jerseyAbbrev(m.awayJersey)}</span></span>
         <span class="c-round">${roundShort}</span>
         <span class="c-photos"><span class="photo-dot ${m.homeImg?'filled':''}"></span><span class="photo-dot ${m.awayImg?'filled':''}"></span></span>
+        ${wentToPens(m) ? `<span class="row-note">(${m.homePens}&ndash;${m.awayPens} on penalties)</span>` : ''}
       </div>`;
   }).join('');
 
